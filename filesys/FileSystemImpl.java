@@ -202,19 +202,143 @@ public final class FileSystemImpl implements IFileSystem {
     @Override
     public void mv(String caminhoAntigo, String caminhoNovo, String usuario)
             throws CaminhoNaoEncontradoException, PermissaoException {
-        // TODO: Implementar movimentação/renomeação de arquivos ou diretórios
+        String[] partesAntigo = caminhoAntigo.split("/");
+        String nomeAntigo = partesAntigo[partesAntigo.length - 1];
+        String caminhoPaiAntigo = String.join("/", Arrays.copyOfRange(partesAntigo, 0, partesAntigo.length - 1));
+
+        Diretorio paiAntigo = caminhoPaiAntigo.isEmpty() ? raiz : navegarParaDiretorio(caminhoPaiAntigo);
+
+        String[] partesNovo = caminhoNovo.split("/");
+        String nomeNovo = partesNovo[partesNovo.length - 1];
+        String caminhoPaiNovo = String.join("/", Arrays.copyOfRange(partesNovo, 0, partesNovo.length - 1));
+
+        Diretorio paiNovo = caminhoPaiNovo.isEmpty() ? raiz : navegarParaDiretorio(caminhoPaiNovo);
+
+        for (Iterator<Arquivo> it = paiAntigo.getArquivos().iterator(); it.hasNext(); ) {
+            Arquivo arq = it.next();
+            if (arq.getMetaDados().getNome().equals(nomeAntigo)) {
+                if (!usuario.equals(ROOT_USER) && !arq.getMetaDados().getDono().equals(usuario)) {
+                    throw new PermissaoException("Sem permissão para mover o arquivo");
+                }
+                it.remove();
+                arq.getMetaDados().setPermissao(usuario, arq.getMetaDados().getPermissao(usuario));
+                arq.getMetaDados().setTamanho(arq.getMetaDados().getTamanho());
+                arq.getMetaDados().setPermissao(usuario, "rwx");
+                paiNovo.adicionarArquivo(new Arquivo(nomeNovo, usuario));
+                return;
+            }
+        }
+
+        for (Iterator<Diretorio> it = paiAntigo.getSubDiretorios().iterator(); it.hasNext(); ) {
+            Diretorio dir = it.next();
+            if (dir.getMetaDados().getNome().equals(nomeAntigo)) {
+                if (!usuario.equals(ROOT_USER) && !dir.getMetaDados().getDono().equals(usuario)) {
+                    throw new PermissaoException("Sem permissão para mover o diretório");
+                }
+                it.remove();
+                dir.getMetaDados().setPermissao(usuario, "rwx");
+                dir.getMetaDados().setTamanho(dir.getMetaDados().getTamanho());
+                Diretorio novoDir = new Diretorio(nomeNovo, usuario);
+                novoDir.getArquivos().addAll(dir.getArquivos());
+                novoDir.getSubDiretorios().addAll(dir.getSubDiretorios());
+                paiNovo.adicionarSubDiretorio(novoDir);
+                return;
+            }
+        }
+
+        throw new CaminhoNaoEncontradoException("Arquivo ou diretório não encontrado para mover");
     }
 
     @Override
     public void ls(String caminho, String usuario, boolean recursivo)
             throws CaminhoNaoEncontradoException, PermissaoException {
-        // TODO: Implementar listagem de arquivos e diretórios (recursiva opcional)
+        Diretorio dir = navegarParaDiretorio(caminho);
+        String permissao = dir.getMetaDados().getPermissao(usuario);
+        if (!permissao.contains("r") && !usuario.equals(ROOT_USER)) {
+            throw new PermissaoException("Permissão negada para listar conteúdo");
+        }
+        listarConteudo(dir, "", recursivo);
     }
 
-    @Override
+    private void listarConteudo(Diretorio dir, String prefixo, boolean recursivo) {
+        for (Diretorio sub : dir.getSubDiretorios()) {
+            System.out.println(prefixo + sub.getMetaDados().getNome() + "/");
+            if (recursivo) {
+                listarConteudo(sub, prefixo + sub.getMetaDados().getNome() + "/", true);
+            }
+        }
+        for (Arquivo arq : dir.getArquivos()) {
+            System.out.println(prefixo + arq.getMetaDados().getNome());
+        }
+    }
+
+
+   @Override
     public void cp(String caminhoOrigem, String caminhoDestino, String usuario, boolean recursivo)
             throws CaminhoNaoEncontradoException, PermissaoException {
-        // TODO: Implementar cópia de arquivos e diretórios (recursiva opcional)
+        String[] partesOrigem = caminhoOrigem.split("/");
+        String nomeOrigem = partesOrigem[partesOrigem.length - 1];
+        String caminhoPaiOrigem = String.join("/", Arrays.copyOfRange(partesOrigem, 0, partesOrigem.length - 1));
+
+        Diretorio paiOrigem = caminhoPaiOrigem.isEmpty() ? raiz : navegarParaDiretorio(caminhoPaiOrigem);
+
+        String[] partesDestino = caminhoDestino.split("/");
+        String nomeDestino = partesDestino[partesDestino.length - 1];
+        String caminhoPaiDestino = String.join("/", Arrays.copyOfRange(partesDestino, 0, partesDestino.length - 1));
+
+        Diretorio paiDestino = caminhoPaiDestino.isEmpty() ? raiz : navegarParaDiretorio(caminhoPaiDestino);
+
+        for (Arquivo arq : paiOrigem.getArquivos()) {
+            if (arq.getMetaDados().getNome().equals(nomeOrigem)) {
+                if (!usuario.equals(ROOT_USER) && !arq.getMetaDados().getDono().equals(usuario)) {
+                    throw new PermissaoException("Sem permissão para copiar o arquivo");
+                }
+                Arquivo copia = new Arquivo(nomeDestino, usuario);
+                for (Bloco bloco : arq.getBlocos()) {
+                    Byte[] dados = Arrays.copyOf(bloco.getDados(), bloco.getDados().length);
+                    Bloco novoBloco = new Bloco(dados.length);
+                    novoBloco.setDados(dados);
+                    copia.addBloco(novoBloco);
+                }
+                paiDestino.adicionarArquivo(copia);
+                return;
+            }
+        }
+
+        for (Diretorio dir : paiOrigem.getSubDiretorios()) {
+            if (dir.getMetaDados().getNome().equals(nomeOrigem)) {
+                if (!usuario.equals(ROOT_USER) && !dir.getMetaDados().getDono().equals(usuario)) {
+                    throw new PermissaoException("Sem permissão para copiar o diretório");
+                }
+                if (!recursivo) {
+                    throw new PermissaoException("Cópia recursiva não habilitada para diretório");
+                }
+                Diretorio copiaDir = copiarDiretorioRecursivo(dir, nomeDestino, usuario);
+                paiDestino.adicionarSubDiretorio(copiaDir);
+                return;
+            }
+        }
+
+        throw new CaminhoNaoEncontradoException("Arquivo ou diretório não encontrado para copiar");
+    }
+
+    private Diretorio copiarDiretorioRecursivo(Diretorio origem, String novoNome, String usuario) {
+        Diretorio copia = new Diretorio(novoNome, usuario);
+        for (Arquivo arq : origem.getArquivos()) {
+            Arquivo novoArq = new Arquivo(arq.getMetaDados().getNome(), usuario);
+            for (Bloco bloco : arq.getBlocos()) {
+                Byte[] dados = Arrays.copyOf(bloco.getDados(), bloco.getDados().length);
+                Bloco novoBloco = new Bloco(dados.length);
+                novoBloco.setDados(dados);
+                novoArq.addBloco(novoBloco);
+            }
+            copia.adicionarArquivo(novoArq);
+        }
+        for (Diretorio subDir : origem.getSubDiretorios()) {
+            Diretorio subCopia = copiarDiretorioRecursivo(subDir, subDir.getMetaDados().getNome(), usuario);
+            copia.adicionarSubDiretorio(subCopia);
+        }
+        return copia;
     }
 
     public void addUser(String user) {
