@@ -123,5 +123,3 @@ Comandos disponíveis:
 ## 📌 Observação Final
 
 Este projeto simula com fidelidade as principais chamadas POSIX exigidas, incluindo armazenamento em blocos e controle de permissões de forma educativa, sem persistência em disco.
-
-Pronto para ser avaliado via terminal e entrevistas presenciais.
