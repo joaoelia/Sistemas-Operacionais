@@ -115,7 +115,7 @@ Comandos disponíveis:
 
 ## 👥 Autores
 
-> João Paulo Fonseca Elias
+> João Paulo Fonseca Elias e 
 > Lucas de Souza Pereira
 
 ---
